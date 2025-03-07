@@ -1,5 +1,4 @@
 const express = require('express');
-const fetch = require('node-fetch');
 const { MongoClient } = require("mongodb");
 const { performance } = require("perf_hooks");
 
