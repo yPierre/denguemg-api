@@ -1,6 +1,7 @@
 const express = require('express');
 const { MongoClient } = require("mongodb");
 const { performance } = require("perf_hooks");
+const https = require('https');
 
 const app = express();
 const port = process.env.PORT || 3000; // Render define a porta via process.env.PORT
@@ -8,7 +9,29 @@ const port = process.env.PORT || 3000; // Render define a porta via process.env.
 const uri = process.env.MONGODB_URI || "mongodb+srv://jeandias1997:GWtDa5xFwnKaYhgG@cluster0.njfbl.mongodb.net/";
 const client = new MongoClient(uri);
 
-// Funções auxiliares do seu código original
+// Agente HTTPS com TLS 1.2 para requisições seguras
+const agent = new https.Agent({
+    secureProtocol: 'TLSv1_2_method' // Força TLS 1.2
+});
+
+// Função auxiliar para fetch com retentativas
+async function fetchWithRetry(url, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(url, {
+                method: "GET",
+                headers: { "Content-Type": "application/json" },
+                agent: agent // Usa o agente HTTPS configurado
+            });
+            if (response.ok) return response;
+            console.warn(`Tentativa ${i + 1} falhou com status ${response.status}`);
+        } catch (error) {
+            console.log(`Tentativa ${i + 1} falhou: ${error.message}`);
+            if (i === retries - 1) throw error; // Lança o erro na última tentativa
+        }
+    }
+}
+
 async function getPreviousCityAccumulated(db, geocode, currentSE) {
     const stateCollection = db.collection("statev3");
     const previousData = await stateCollection.findOne(
@@ -66,8 +89,7 @@ async function fetchCitiesMG() {
     const urlIBGE = "https://servicodados.ibge.gov.br/api/v1/localidades/estados/31/municipios";
     try {
         console.log("Buscando lista de cidades de MG...");
-        const response = await fetch(urlIBGE);
-        if (!response.ok) throw new Error(`Erro na API do IBGE: ${response.status}`);
+        const response = await fetchWithRetry(urlIBGE);
         const cities = await response.json();
         return cities.map(city => ({ geocode: city.id, name: city.nome }));
     } catch (error) {
@@ -90,11 +112,7 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
 
     try {
         console.log(`Buscando dados para ${cityName} (${geocode})...`);
-        const response = await fetch(`${apiUrl}?${params}`, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-        });
-
+        const response = await fetchWithRetry(`${apiUrl}?${params}`);
         if (!response.ok) {
             console.warn(`⚠️ API InfoDengue retornou erro para ${cityName} (${geocode}): ${response.status} - ${response.statusText}`);
             return null;
@@ -130,7 +148,7 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
             notif_accum_year: previousAccumulated + entry.casos,
         }));
     } catch (error) {
-        console.error(`Erro ao buscar dados para ${cityName} (${geocode}):`, error);
+        console.error(`Erro ao buscar dados para ${cityName} (${geocode}):`, error.message);
         return null;
     }
 }
@@ -180,7 +198,6 @@ async function updateStateDatabase(db, newStateData) {
     console.log("🟢 Dados do estado atualizados com sucesso!");
 }
 
-// Função principal
 async function updateState() {
     const startTime = performance.now();
     try {
@@ -199,21 +216,27 @@ async function updateState() {
         let citiesData = [];
         let hasError = false;
 
-        await Promise.all(
-            cities.map(async (city) => {
-                try {
-                    const dengueData = await fetchDengueData(db, city.geocode, city.name, seData.ew_start, seData.ew_end, seData.ey_start, seData.ey_end);
-                    if (dengueData && dengueData.length > 0) {
-                        citiesData.push({ ...city, ...dengueData[0] });
-                    } else {
-                        throw new Error(`Dados não encontrados para ${city.name} (${city.geocode})`);
+        // Processar em lotes de 50 cidades
+        const batchSize = 50;
+        for (let i = 0; i < cities.length; i += batchSize) {
+            const batch = cities.slice(i, i + batchSize);
+            console.log(`Processando lote de cidades ${i + 1} a ${i + batch.length}...`);
+            await Promise.all(
+                batch.map(async (city) => {
+                    try {
+                        const dengueData = await fetchDengueData(db, city.geocode, city.name, seData.ew_start, seData.ew_end, seData.ey_start, seData.ey_end);
+                        if (dengueData && dengueData.length > 0) {
+                            citiesData.push({ ...city, ...dengueData[0] });
+                        } else {
+                            throw new Error(`Dados não encontrados para ${city.name} (${city.geocode})`);
+                        }
+                    } catch (error) {
+                        console.error(`Erro ao processar ${city.name}:`, error.message);
+                        hasError = true;
                     }
-                } catch (error) {
-                    console.error(`Erro ao processar ${city.name}:`, error.message);
-                    hasError = true;
-                }
-            })
-        );
+                })
+            );
+        }
 
         if (hasError) {
             console.log("🔴 Erro ao processar uma ou mais cidades. Nenhum dado será atualizado.");
@@ -252,4 +275,3 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
     console.log(`Servidor rodando na porta ${port}`);
 });
-
