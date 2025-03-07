@@ -1,4 +1,5 @@
 const express = require('express');
+const fetch = require('node-fetch');
 const { MongoClient } = require("mongodb");
 const { performance } = require("perf_hooks");
 
@@ -96,11 +97,16 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
         });
 
         if (!response.ok) {
-            console.warn(`⚠️ API InfoDengue retornou erro para ${cityName} (${geocode}): ${response.status}`);
+            console.warn(`⚠️ API InfoDengue retornou erro para ${cityName} (${geocode}): ${response.status} - ${response.statusText}`);
             return null;
         }
 
         const data = await response.json();
+        if (!data || data.length === 0) {
+            console.warn(`⚠️ Nenhum dado retornado para ${cityName} (${geocode})`);
+            return null;
+        }
+
         const currentSE = `${ey_start}${ew_start.toString().padStart(2, '0')}`;
         const previousAccumulated = await getPreviousCityAccumulated(db, geocode, currentSE);
         return data.map(entry => ({
@@ -125,7 +131,7 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
             notif_accum_year: previousAccumulated + entry.casos,
         }));
     } catch (error) {
-        console.error(`Erro ao buscar dados para ${cityName} (${geocode}):`, error.message);
+        console.error(`Erro ao buscar dados para ${cityName} (${geocode}):`, error);
         return null;
     }
 }
