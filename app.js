@@ -24,9 +24,9 @@ async function fetchWithRetry(url, retries = 3) {
                 agent: agent // Usa o agente HTTPS configurado
             });
             if (response.ok) return response;
-            console.warn(`Tentativa ${i + 1} falhou com status ${response.status}`);
+            //console.warn(`Tentativa ${i + 1} falhou com status ${response.status}`);
         } catch (error) {
-            console.log(`Tentativa ${i + 1} falhou: ${error.message}`);
+            //console.log(`Tentativa ${i + 1} falhou: ${error.message}`);
             if (i === retries - 1) throw error; // Lança o erro na última tentativa
         }
     }
@@ -81,14 +81,14 @@ async function getLastEpidemiologicalWeek(db) {
         ey_end = year + 1;
     }
 
-    console.log(`📌 Última SE encontrada: ${latestSE} → Requisitando dados para SE: ${ey_start}${ew_start.toString().padStart(2, '0')}`);
+    //console.log(`📌 Última SE encontrada: ${latestSE} → Requisitando dados para SE: ${ey_start}${ew_start.toString().padStart(2, '0')}`);
     return { ew_start, ew_end, ey_start, ey_end };
 }
 
 async function fetchCitiesMG() {
     const urlIBGE = "https://servicodados.ibge.gov.br/api/v1/localidades/estados/31/municipios";
     try {
-        console.log("Buscando lista de cidades de MG...");
+        //console.log("Buscando lista de cidades de MG...");
         const response = await fetchWithRetry(urlIBGE);
         const cities = await response.json();
         return cities.map(city => ({ geocode: city.id, name: city.nome }));
@@ -111,7 +111,7 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
     }).toString();
 
     try {
-        console.log(`Buscando dados para ${cityName} (${geocode})...`);
+        //console.log(`Buscando dados para ${cityName} (${geocode})...`);
         const response = await fetchWithRetry(`${apiUrl}?${params}`);
         if (!response.ok) {
             console.warn(`⚠️ API InfoDengue retornou erro para ${cityName} (${geocode}): ${response.status} - ${response.statusText}`);
@@ -195,7 +195,7 @@ async function aggregateStateData(citiesData) {
 async function updateStateDatabase(db, newStateData) {
     const stateCollection = db.collection("statev3");
     await stateCollection.insertOne(newStateData);
-    console.log("🟢 Dados do estado atualizados com sucesso!");
+    //console.log("🟢 Dados do estado atualizados com sucesso!");
 }
 
 async function updateState() {
@@ -209,7 +209,7 @@ async function updateState() {
 
         const cities = await fetchCitiesMG();
         if (cities.length === 0) {
-            console.log("Nenhuma cidade encontrada. Encerrando.");
+            //console.log("Nenhuma cidade encontrada. Encerrando.");
             return;
         }
 
@@ -220,7 +220,7 @@ async function updateState() {
         const batchSize = 50;
         for (let i = 0; i < cities.length; i += batchSize) {
             const batch = cities.slice(i, i + batchSize);
-            console.log(`Processando lote de cidades ${i + 1} a ${i + batch.length}...`);
+            //console.log(`Processando lote de cidades ${i + 1} a ${i + batch.length}...`);
             await Promise.all(
                 batch.map(async (city) => {
                     try {
@@ -239,7 +239,7 @@ async function updateState() {
         }
 
         if (hasError) {
-            console.log("🔴 Erro ao processar uma ou mais cidades. Nenhum dado será atualizado.");
+            //console.log("🔴 Erro ao processar uma ou mais cidades. Nenhum dado será atualizado.");
             return;
         }
 
@@ -248,7 +248,7 @@ async function updateState() {
             await updateStateDatabase(db, newStateData);
         }
 
-        console.log(`✅ Atualização concluída! ⏳ Tempo total: ${((performance.now() - startTime) / 1000).toFixed(2)} segundos.`);
+        //console.log(`✅ Atualização concluída! ⏳ Tempo total: ${((performance.now() - startTime) / 1000).toFixed(2)} segundos.`);
     } catch (error) {
         console.error("Erro durante a execução:", error);
     } finally {
@@ -273,5 +273,5 @@ app.get('/', (req, res) => {
 
 // Iniciar o servidor
 app.listen(port, () => {
-    console.log(`Servidor rodando na porta ${port}`);
+    //console.log(`Servidor rodando na porta ${port}`);
 });
