@@ -67,7 +67,7 @@ async function getEpidemiologicalWeeks(db, numWeeks = 2) {
     let ew_start, ew_end, ey_start, ey_end;
     if (week < 52) {
         ew_end = week + 1; // Próxima SE
-        ew_start = week - 1;   // SE anterior
+        ew_start = week;   // SE anterior
         ey_start = year;
         ey_end = year;
     } else {
@@ -119,10 +119,10 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
 
         const result = {};
         for (const entry of data) {
-            const se = entry.SE.toString();
+            const se = Number(entry.SE);
             const previousAccumulated = await getPreviousCityAccumulated(db, geocode, se);
             result[se] = {
-                SE: entry.se,
+                SE: se,
                 casos_est: entry.casos_est,
                 casos_est_min: entry.casos_est_min,
                 casos_est_max: entry.casos_est_max,
@@ -256,8 +256,8 @@ async function updateState() {
 
         let citiesDataBySE = {};
         const seList = [
-            `${seData.ey_start}${seData.ew_start.toString().padStart(2, '0')}`,
-            `${seData.ey_end}${seData.ew_end.toString().padStart(2, '0')}`
+            Number(`${seData.ey_start}${seData.ew_start.toString().padStart(2, '0')}`), // Converte para número
+            Number(`${seData.ey_end}${seData.ew_end.toString().padStart(2, '0')}`)     // Converte para número
         ];
         for (const se of seList) {
             citiesDataBySE[se] = [];
