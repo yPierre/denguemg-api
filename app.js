@@ -194,9 +194,10 @@ async function aggregateStateData(citiesData, se) {
 async function updateStateDatabase(db, citiesDataBySE) {
     const stateCollection = db.collection("statev3");
 
-    for (const se of Object.keys(citiesDataBySE)) {
+    for (const seStr of Object.keys(citiesDataBySE)) {
+        const se = Number(seStr)
         const existingData = await stateCollection.findOne({ SE: se });
-        const newData = await aggregateStateData(citiesDataBySE[se], se);
+        const newData = await aggregateStateData(citiesDataBySE[seStr], se);
 
         if (!existingData) {
             // Inserir nova SE
@@ -208,6 +209,7 @@ async function updateStateDatabase(db, citiesDataBySE) {
                 { SE: se },
                 {
                     $set: {
+                        SE: se,
                         total_week_cases: newData.total_week_cases,
                         cities_in_alert_state: newData.cities_in_alert_state,
                         total_notif_accum_year: newData.total_notif_accum_year,
