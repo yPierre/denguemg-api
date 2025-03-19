@@ -67,7 +67,7 @@ async function getEpidemiologicalWeeks(db, numWeeks = 2) {
     let ew_start, ew_end, ey_start, ey_end;
     if (week < 52) {
         ew_end = week + 1; // Próxima SE
-        ew_start = week;   // SE anterior
+        ew_start = week - 1;   // SE anterior
         ey_start = year;
         ey_end = year;
     } else {
