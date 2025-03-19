@@ -4,30 +4,26 @@ const { performance } = require("perf_hooks");
 const https = require('https');
 
 const app = express();
-const port = process.env.PORT || 3000; // Render define a porta via process.env.PORT
+const port = process.env.PORT || 3000;
 
 const uri = process.env.MONGODB_URI || "mongodb+srv://jeandias1997:GWtDa5xFwnKaYhgG@cluster0.njfbl.mongodb.net/";
 const client = new MongoClient(uri);
 
-// Agente HTTPS com TLS 1.2 para requisições seguras
 const agent = new https.Agent({
-    secureProtocol: 'TLSv1_2_method' // Força TLS 1.2
+    secureProtocol: 'TLSv1_2_method'
 });
 
-// Função auxiliar para fetch com retentativas
 async function fetchWithRetry(url, retries = 3) {
     for (let i = 0; i < retries; i++) {
         try {
             const response = await fetch(url, {
                 method: "GET",
                 headers: { "Content-Type": "application/json" },
-                agent: agent // Usa o agente HTTPS configurado
+                agent: agent
             });
             if (response.ok) return response;
-            //console.warn(`Tentativa ${i + 1} falhou com status ${response.status}`);
         } catch (error) {
-            //console.log(`Tentativa ${i + 1} falhou: ${error.message}`);
-            if (i === retries - 1) throw error; // Lança o erro na última tentativa
+            if (i === retries - 1) throw error;
         }
     }
 }
@@ -56,7 +52,7 @@ async function getPreviousCityAccumulated(db, geocode, currentSE) {
     return previousData.cities[0]?.notif_accum_year || 0;
 }
 
-async function getLastEpidemiologicalWeek(db) {
+async function getEpidemiologicalWeeks(db, numWeeks = 2) {
     const stateCollection = db.collection("statev3");
     const stateData = await stateCollection.findOne({}, { sort: { SE: -1 } });
 
@@ -70,25 +66,23 @@ async function getLastEpidemiologicalWeek(db) {
 
     let ew_start, ew_end, ey_start, ey_end;
     if (week < 52) {
-        ew_start = week + 1;
-        ew_end = week + 1;
+        ew_end = week + 1; // Próxima SE
+        ew_start = week;   // SE anterior
         ey_start = year;
         ey_end = year;
     } else {
-        ew_start = 1;
         ew_end = 1;
-        ey_start = year + 1;
+        ew_start = 52;
+        ey_start = year;
         ey_end = year + 1;
     }
 
-    //console.log(`📌 Última SE encontrada: ${latestSE} → Requisitando dados para SE: ${ey_start}${ew_start.toString().padStart(2, '0')}`);
     return { ew_start, ew_end, ey_start, ey_end };
 }
 
 async function fetchCitiesMG() {
     const urlIBGE = "https://servicodados.ibge.gov.br/api/v1/localidades/estados/31/municipios";
     try {
-        //console.log("Buscando lista de cidades de MG...");
         const response = await fetchWithRetry(urlIBGE);
         const cities = await response.json();
         return cities.map(city => ({ geocode: city.id, name: city.nome }));
@@ -111,10 +105,9 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
     }).toString();
 
     try {
-        //console.log(`Buscando dados para ${cityName} (${geocode})...`);
         const response = await fetchWithRetry(`${apiUrl}?${params}`);
         if (!response.ok) {
-            console.warn(`⚠️ API InfoDengue retornou erro para ${cityName} (${geocode}): ${response.status} - ${response.statusText}`);
+            console.warn(`⚠️ API InfoDengue retornou erro para ${cityName} (${geocode}): ${response.status}`);
             return null;
         }
 
@@ -124,38 +117,44 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
             return null;
         }
 
-        const currentSE = `${ey_start}${ew_start.toString().padStart(2, '0')}`;
-        const previousAccumulated = await getPreviousCityAccumulated(db, geocode, currentSE);
-        return data.map(entry => ({
-            SE: entry.SE,
-            casos_est: entry.casos_est,
-            casos_est_min: entry.casos_est_min,
-            casos_est_max: entry.casos_est_max,
-            casos: entry.casos,
-            p_rt1: entry.p_rt1,
-            p_inc100k: entry.p_inc100k,
-            nivel: entry.nivel,
-            Rt: entry.Rt,
-            tempmin: entry.tempmin,
-            umidmax: entry.umidmax,
-            receptivo: entry.receptivo,
-            transmissao: entry.transmissao,
-            nivel_inc: entry.nivel_inc,
-            umidmed: entry.umidmed,
-            umidmin: entry.umidmin,
-            tempmed: entry.tempmed,
-            tempmax: entry.tempmax,
-            notif_accum_year: previousAccumulated + entry.casos,
-        }));
+        const result = {};
+        for (const entry of data) {
+            const se = entry.SE.toString();
+            const previousAccumulated = await getPreviousCityAccumulated(db, geocode, se);
+            result[se] = {
+                SE: se,
+                casos_est: entry.casos_est,
+                casos_est_min: entry.casos_est_min,
+                casos_est_max: entry.casos_est_max,
+                casos: entry.casos,
+                p_rt1: entry.p_rt1,
+                p_inc100k: entry.p_inc100k,
+                nivel: entry.nivel,
+                Rt: entry.Rt,
+                tempmin: entry.tempmin,
+                umidmax: entry.umidmax,
+                receptivo: entry.receptivo,
+                transmissao: entry.transmissao,
+                nivel_inc: entry.nivel_inc,
+                umidmed: entry.umidmed,
+                umidmin: entry.umidmin,
+                tempmed: entry.tempmed,
+                tempmax: entry.tempmax,
+                notif_accum_year: previousAccumulated + entry.casos,
+                versao_modelo: entry.versao_modelo || "N/A" // Adiciona mesmo que não exista ainda
+            };
+        }
+
+        return result;
     } catch (error) {
         console.error(`Erro ao buscar dados para ${cityName} (${geocode}):`, error.message);
         return null;
     }
 }
 
-async function aggregateStateData(citiesData) {
+async function aggregateStateData(citiesData, se) {
     const stateData = {
-        SE: citiesData[0].SE,
+        SE: se,
         total_week_cases: 0,
         cities_in_alert_state: 0,
         total_notif_accum_year: 0,
@@ -165,7 +164,6 @@ async function aggregateStateData(citiesData) {
     for (const city of citiesData) {
         stateData.total_week_cases += city.casos || 0;
         stateData.total_notif_accum_year += city.notif_accum_year || 0;
-
         if (city.nivel > 1) stateData.cities_in_alert_state++;
 
         stateData.cities.push({
@@ -185,70 +183,109 @@ async function aggregateStateData(citiesData) {
             umidmed: city.umidmed,
             umidmin: city.umidmin,
             tempmed: city.tempmed,
-            tempmax: city.tempmax
+            tempmax: city.tempmax,
+            versao_modelo: city.versao_modelo
         });
     }
 
     return stateData;
 }
 
-async function updateStateDatabase(db, newStateData) {
+async function updateStateDatabase(db, citiesDataBySE) {
     const stateCollection = db.collection("statev3");
-    await stateCollection.insertOne(newStateData);
-    //console.log("🟢 Dados do estado atualizados com sucesso!");
+
+    for (const se of Object.keys(citiesDataBySE)) {
+        const existingData = await stateCollection.findOne({ SE: se });
+        const newData = await aggregateStateData(citiesDataBySE[se], se);
+
+        if (!existingData) {
+            // Inserir nova SE
+            await stateCollection.insertOne(newData);
+            console.log(`Nova SE inserida: ${se}`);
+        } else {
+            // Atualizar apenas os campos especificados
+            await stateCollection.updateOne(
+                { SE: se },
+                {
+                    $set: {
+                        total_week_cases: newData.total_week_cases,
+                        cities_in_alert_state: newData.cities_in_alert_state,
+                        total_notif_accum_year: newData.total_notif_accum_year,
+                        "cities": newData.cities.map(city => ({
+                            city: city.city,
+                            geocode: city.geocode,
+                            casos: city.casos,
+                            notif_accum_year: city.notif_accum_year,
+                            nivel_inc: city.nivel_inc,
+                            p_rt1: city.p_rt1,
+                            p_inc100k: city.p_inc100k,
+                            nivel: city.nivel,
+                            Rt: city.Rt,
+                            tempmin: city.tempmin,
+                            umidmax: city.umidmax,
+                            receptivo: city.receptivo,
+                            transmissao: city.transmissao,
+                            umidmed: city.umidmed,
+                            umidmin: city.umidmin,
+                            tempmed: city.tempmed,
+                            tempmax: city.tempmax,
+                            versao_modelo: city.versao_modelo
+                        }))
+                    }
+                }
+            );
+            console.log(`SE atualizada: ${se}`);
+        }
+    }
 }
 
 async function updateState() {
-    const startTime = performance.now();
+    console.time("Tempo total de execução");
     try {
         await client.connect();
         const db = client.db("denguemg");
 
-        const seData = await getLastEpidemiologicalWeek(db);
+        const seData = await getEpidemiologicalWeeks(db, 2);
         if (!seData) return;
 
         const cities = await fetchCitiesMG();
         if (cities.length === 0) {
-            //console.log("Nenhuma cidade encontrada. Encerrando.");
+            console.log("Nenhuma cidade encontrada. Encerrando.");
             return;
         }
 
-        let citiesData = [];
-        let hasError = false;
+        let citiesDataBySE = {};
+        const seList = [
+            `${seData.ey_start}${seData.ew_start.toString().padStart(2, '0')}`,
+            `${seData.ey_end}${seData.ew_end.toString().padStart(2, '0')}`
+        ];
+        for (const se of seList) {
+            citiesDataBySE[se] = [];
+        }
 
-        // Processar em lotes de 50 cidades
         const batchSize = 50;
         for (let i = 0; i < cities.length; i += batchSize) {
             const batch = cities.slice(i, i + batchSize);
-            //console.log(`Processando lote de cidades ${i + 1} a ${i + batch.length}...`);
             await Promise.all(
                 batch.map(async (city) => {
                     try {
                         const dengueData = await fetchDengueData(db, city.geocode, city.name, seData.ew_start, seData.ew_end, seData.ey_start, seData.ey_end);
-                        if (dengueData && dengueData.length > 0) {
-                            citiesData.push({ ...city, ...dengueData[0] });
-                        } else {
-                            throw new Error(`Dados não encontrados para ${city.name} (${city.geocode})`);
+                        if (dengueData) {
+                            for (const se of seList) {
+                                if (dengueData[se]) {
+                                    citiesDataBySE[se].push({ ...city, ...dengueData[se] });
+                                }
+                            }
                         }
                     } catch (error) {
                         console.error(`Erro ao processar ${city.name}:`, error.message);
-                        hasError = true;
                     }
                 })
             );
         }
 
-        if (hasError) {
-            //console.log("🔴 Erro ao processar uma ou mais cidades. Nenhum dado será atualizado.");
-            return;
-        }
-
-        if (citiesData.length > 0) {
-            const newStateData = await aggregateStateData(citiesData);
-            await updateStateDatabase(db, newStateData);
-        }
-
-        //console.log(`✅ Atualização concluída! ⏳ Tempo total: ${((performance.now() - startTime) / 1000).toFixed(2)} segundos.`);
+        await updateStateDatabase(db, citiesDataBySE);
+        console.timeEnd("Tempo total de execução");
     } catch (error) {
         console.error("Erro durante a execução:", error);
     } finally {
@@ -256,7 +293,6 @@ async function updateState() {
     }
 }
 
-// Rota para disparar a atualização
 app.get('/update', async (req, res) => {
     try {
         await updateState();
@@ -266,12 +302,10 @@ app.get('/update', async (req, res) => {
     }
 });
 
-// Rota raiz para evitar erros
 app.get('/', (req, res) => {
     res.send('API de atualização de dengue está rodando!');
 });
 
-// Iniciar o servidor
 app.listen(port, () => {
-    //console.log(`Servidor rodando na porta ${port}`);
+    console.log(`Servidor rodando na porta ${port}`);
 });
