@@ -87,7 +87,7 @@ async function fetchCitiesMG() {
         const cities = await response.json();
         return cities.map(city => ({ geocode: city.id, name: city.nome }));
     } catch (error) {
-        console.error("Erro ao obter cidades de MG:", error.message);
+        //console.error("Erro ao obter cidades de MG:", error.message);
         return [];
     }
 }
@@ -107,13 +107,13 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
     try {
         const response = await fetchWithRetry(`${apiUrl}?${params}`);
         if (!response.ok) {
-            console.warn(`⚠️ API InfoDengue retornou erro para ${cityName} (${geocode}): ${response.status}`);
+            //console.warn(`⚠️ API InfoDengue retornou erro para ${cityName} (${geocode}): ${response.status}`);
             return null;
         }
 
         const data = await response.json();
         if (!data || data.length === 0) {
-            console.warn(`⚠️ Nenhum dado retornado para ${cityName} (${geocode})`);
+            //console.warn(`⚠️ Nenhum dado retornado para ${cityName} (${geocode})`);
             return null;
         }
 
@@ -147,7 +147,7 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
 
         return result;
     } catch (error) {
-        console.error(`Erro ao buscar dados para ${cityName} (${geocode}):`, error.message);
+        //console.error(`Erro ao buscar dados para ${cityName} (${geocode}):`, error.message);
         return null;
     }
 }
@@ -201,7 +201,7 @@ async function updateStateDatabase(db, citiesDataBySE) {
         if (!existingData) {
             // Inserir nova SE
             await stateCollection.insertOne(newData);
-            console.log(`Nova SE inserida: ${se}`);
+            //log(`Nova SE inserida: ${se}`);
         } else {
             // Atualizar apenas os campos especificados
             await stateCollection.updateOne(
@@ -234,7 +234,7 @@ async function updateStateDatabase(db, citiesDataBySE) {
                     }
                 }
             );
-            console.log(`SE atualizada: ${se}`);
+            //console.log(`SE atualizada: ${se}`);
         }
     }
 }
@@ -250,7 +250,7 @@ async function updateState() {
 
         const cities = await fetchCitiesMG();
         if (cities.length === 0) {
-            console.log("Nenhuma cidade encontrada. Encerrando.");
+            //console.log("Nenhuma cidade encontrada. Encerrando.");
             return;
         }
 
@@ -278,7 +278,7 @@ async function updateState() {
                             }
                         }
                     } catch (error) {
-                        console.error(`Erro ao processar ${city.name}:`, error.message);
+                        //console.error(`Erro ao processar ${city.name}:`, error.message);
                     }
                 })
             );
