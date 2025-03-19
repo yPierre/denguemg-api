@@ -122,7 +122,7 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
             const se = entry.SE.toString();
             const previousAccumulated = await getPreviousCityAccumulated(db, geocode, se);
             result[se] = {
-                SE: se,
+                SE: entry.se,
                 casos_est: entry.casos_est,
                 casos_est_min: entry.casos_est_min,
                 casos_est_max: entry.casos_est_max,
