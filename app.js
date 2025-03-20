@@ -30,26 +30,22 @@ async function fetchWithRetry(url, retries = 3) {
 
 async function getPreviousCityAccumulated(db, geocode, currentSE) {
     const stateCollection = db.collection("statev3");
+    const previousSE = currentSE - 1;
+
+    // Busca o documento da SE anterior para a cidade
     const previousData = await stateCollection.findOne(
-        { "cities.geocode": geocode },
-        { 
-            sort: { SE: -1 },
-            projection: { 
-                _id: 0,
-                SE: 1,
-                cities: { $elemMatch: { geocode: geocode } }
-            }
-        }
+        { SE: previousSE, "cities.geocode": geocode },
+        { projection: { "cities.$": 1 } }
     );
 
-    if (!previousData) return 0;
+    if (!previousData || !previousData.cities || previousData.cities.length === 0) {
+        // Se não houver dado anterior, verifica se é um novo ano
+        const currentYear = parseInt(currentSE.toString().substring(0, 4));
+        const previousYear = previousSE ? parseInt(previousSE.toString().substring(0, 4)) : currentYear - 1;
+        return currentYear > previousYear ? 0 : 0; // Reinicia se for novo ano
+    }
 
-    const currentYear = parseInt(currentSE.toString().substring(0, 4));
-    const previousYear = parseInt(previousData.SE.toString().substring(0, 4));
-
-    if (currentYear > previousYear) return 0;
-
-    return previousData.cities[0]?.notif_accum_year || 0;
+    return previousData.cities[0].notif_accum_year || 0;
 }
 
 async function getEpidemiologicalWeeks(db, numWeeks = 2) {
@@ -206,7 +202,7 @@ async function aggregateStateData(db, citiesData, se) {
     const previousSE = se - 1;
     const previousData = await db.collection("statev3").findOne(
         { SE: previousSE },
-        { projection: { total_notif_accum_year: 1 } }
+        { projection: { total_notif_accum_year: 1, SE: 1 } }
     );
     const previousAccumulated = previousData ? previousData.total_notif_accum_year || 0 : 0;
     const currentYear = parseInt(se.toString().substring(0, 4));
@@ -296,11 +292,6 @@ async function updateState() {
             );
         }
 
-        // Log para verificar o conteúdo de citiesDataBySE
-        console.log("Dados coletados por SE:", Object.keys(citiesDataBySE).map(se => ({
-            SE: se,
-            numCities: citiesDataBySE[se].length
-        })));
 
         await updateStateDatabase(db, citiesDataBySE);
         console.timeEnd("Tempo total de execução");
