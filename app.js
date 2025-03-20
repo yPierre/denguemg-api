@@ -163,7 +163,7 @@ async function aggregateStateData(citiesData, se) {
 
     for (const city of citiesData) {
         stateData.total_week_cases += city.casos || 0;
-        stateData.total_notif_accum_year += city.notif_accum_year || 0;
+        //stateData.total_notif_accum_year += city.notif_accum_year || 0;
         if (city.nivel > 1) stateData.cities_in_alert_state++;
 
         stateData.cities.push({
@@ -188,6 +188,19 @@ async function aggregateStateData(citiesData, se) {
         });
     }
 
+    // Calcula total_notif_accum_year corretamente
+    const previousSE = se - 1;
+    const previousData = await db.collection("statev3").findOne(
+        { SE: previousSE },
+        { projection: { total_notif_accum_year: 1 } }
+    );
+    const previousAccumulated = previousData ? previousData.total_notif_accum_year || 0 : 0;
+    
+    // Verifica se é o início de um novo ano
+    const currentYear = parseInt(se.toString().substring(0, 4));
+    const previousYear = previousData ? parseInt(previousData.SE.toString().substring(0, 4)) : currentYear - 1;
+    stateData.total_notif_accum_year = currentYear > previousYear ? stateData.total_week_cases : previousAccumulated + stateData.total_week_cases;
+
     return stateData;
 }
 
@@ -197,7 +210,7 @@ async function updateStateDatabase(db, citiesDataBySE) {
     for (const seStr of Object.keys(citiesDataBySE)) {
         const se = Number(seStr)
         const existingData = await stateCollection.findOne({ SE: se });
-        const newData = await aggregateStateData(citiesDataBySE[seStr], se);
+        const newData = await aggregateStateData(db, citiesDataBySE[seStr], se);
 
         if (!existingData) {
             // Inserir nova SE
@@ -213,26 +226,7 @@ async function updateStateDatabase(db, citiesDataBySE) {
                         total_week_cases: newData.total_week_cases,
                         cities_in_alert_state: newData.cities_in_alert_state,
                         total_notif_accum_year: newData.total_notif_accum_year,
-                        "cities": newData.cities.map(city => ({
-                            city: city.city,
-                            geocode: city.geocode,
-                            casos: city.casos,
-                            notif_accum_year: city.notif_accum_year,
-                            nivel_inc: city.nivel_inc,
-                            p_rt1: city.p_rt1,
-                            p_inc100k: city.p_inc100k,
-                            nivel: city.nivel,
-                            Rt: city.Rt,
-                            tempmin: city.tempmin,
-                            umidmax: city.umidmax,
-                            receptivo: city.receptivo,
-                            transmissao: city.transmissao,
-                            umidmed: city.umidmed,
-                            umidmin: city.umidmin,
-                            tempmed: city.tempmed,
-                            tempmax: city.tempmax,
-                            versao_modelo: city.versao_modelo
-                        }))
+                        cities: newData.cities
                     }
                 }
             );
