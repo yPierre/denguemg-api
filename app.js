@@ -4,7 +4,7 @@ const { performance } = require("perf_hooks");
 const https = require('https');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3333;
 
 const uri = process.env.MONGODB_URI || "mongodb+srv://jeandias1997:GWtDa5xFwnKaYhgG@cluster0.njfbl.mongodb.net/";
 const client = new MongoClient(uri);
@@ -29,7 +29,7 @@ async function fetchWithRetry(url, retries = 3) {
 }
 
 async function getPreviousCityAccumulated(db, geocode, currentSE) {
-    const stateCollection = db.collection("statev3");
+    const stateCollection = db.collection("statev4");
     const previousSE = currentSE - 1;
 
     // Busca o documento da SE anterior para a cidade
@@ -49,7 +49,7 @@ async function getPreviousCityAccumulated(db, geocode, currentSE) {
 }
 
 async function getEpidemiologicalWeeks(db, numWeeks = 2) {
-    const stateCollection = db.collection("statev3");
+    const stateCollection = db.collection("statev4");
     const stateData = await stateCollection.findOne({}, { sort: { SE: -1 } });
 
     if (!stateData) {
@@ -161,7 +161,7 @@ async function aggregateStateData(db, citiesData, se) {
     if (!Array.isArray(citiesData) || !citiesData) {
         console.warn(`Nenhum dado de cidades disponível para SE ${se}. Retornando stateData vazio.`);
         const previousSE = se - 1;
-        const previousData = await db.collection("statev3").findOne(
+        const previousData = await db.collection("statev4").findOne(
             { SE: previousSE },
             { projection: { total_notif_accum_year: 1 } }
         );
@@ -175,7 +175,7 @@ async function aggregateStateData(db, citiesData, se) {
     // Calcula total_week_cases e cities_in_alert_state
     for (const city of citiesData) {
         stateData.total_week_cases += city.casos || 0;
-        if (city.nivel > 1) stateData.cities_in_alert_state++;
+        if (city.nivel === 4) stateData.cities_in_alert_state++;
         stateData.cities.push({
             city: city.name,
             geocode: city.geocode,
@@ -200,7 +200,7 @@ async function aggregateStateData(db, citiesData, se) {
 
     // Calcula total_notif_accum_year corretamente
     const previousSE = se - 1;
-    const previousData = await db.collection("statev3").findOne(
+    const previousData = await db.collection("statev4").findOne(
         { SE: previousSE },
         { projection: { total_notif_accum_year: 1, SE: 1 } }
     );
@@ -213,7 +213,7 @@ async function aggregateStateData(db, citiesData, se) {
 }
 
 async function updateStateDatabase(db, citiesDataBySE) {
-    const stateCollection = db.collection("statev3");
+    const stateCollection = db.collection("statev4");
 
     for (const seStr of Object.keys(citiesDataBySE)) {
         const se = Number(seStr)
