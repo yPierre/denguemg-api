@@ -4,7 +4,7 @@ const { performance } = require("perf_hooks");
 const https = require('https');
 
 const app = express();
-const port = process.env.PORT || 3333;
+const port = process.env.PORT || 3000;
 
 const uri = process.env.MONGODB_URI || "mongodb+srv://jeandias1997:GWtDa5xFwnKaYhgG@cluster0.njfbl.mongodb.net/";
 const client = new MongoClient(uri);
@@ -48,7 +48,7 @@ async function getPreviousCityAccumulated(db, geocode, currentSE) {
     return previousData.cities[0].notif_accum_year || 0;
 }
 
-async function getEpidemiologicalWeeks(db, numWeeks = 2) {
+async function getEpidemiologicalWeeks(db, numWeeksToUpdate = 5) {
     const stateCollection = db.collection("statev4");
     const stateData = await stateCollection.findOne({}, { sort: { SE: -1 } });
 
@@ -61,16 +61,17 @@ async function getEpidemiologicalWeeks(db, numWeeks = 2) {
     const week = parseInt(latestSE.substring(4, 6));
 
     let ew_start, ew_end, ey_start, ey_end;
-    if (week < 52) {
-        ew_end = week + 1; // Próxima SE
-        ew_start = week;   // SE anterior
+    if (week >= numWeeksToUpdate) {
+        ew_start = week - numWeeksToUpdate;
+        ew_end = week + 1;
         ey_start = year;
         ey_end = year;
     } else {
-        ew_end = 1;
-        ew_start = 52;
-        ey_start = year;
-        ey_end = year + 1;
+        const weeksInPrevYear = numWeeksToUpdate - week;
+        ew_start = 53 - weeksInPrevYear; // Volta para o ano anterior
+        ew_end = week + 1;
+        ey_start = year - 1;
+        ey_end = year;
     }
 
     return { ew_start, ew_end, ey_start, ey_end };
@@ -249,8 +250,11 @@ async function updateState() {
         await client.connect();
         const db = client.db("denguemg");
 
-        const seData = await getEpidemiologicalWeeks(db, 2);
+        const numWeeksToUpdate = 5;
+        const seData = await getEpidemiologicalWeeks(db, numWeeksToUpdate);
         if (!seData) return;
+
+        console.log(`Intervalo da API: ${seData.ey_start}${seData.ew_start.toString().padStart(2, '0')} a ${seData.ey_end}${seData.ew_end.toString().padStart(2, '0')}`);
 
         const cities = await fetchCitiesMG();
         if (cities.length === 0) {
@@ -259,13 +263,23 @@ async function updateState() {
         }
 
         let citiesDataBySE = {};
-        const seList = [
-            Number(`${seData.ey_start}${seData.ew_start.toString().padStart(2, '0')}`),
-            Number(`${seData.ey_end}${seData.ew_end.toString().padStart(2, '0')}`)
-        ];
-        for (const se of seList) {
+        const seList = [];
+        let currentYear = seData.ey_start;
+        let currentWeek = seData.ew_start;
+        const totalWeeks = numWeeksToUpdate + 1; // 5 para atualizar + 1 nova
+        for (let i = 0; i < totalWeeks; i++) {
+            let week = currentWeek + i;
+            let year = currentYear;
+            if (week > 52) {
+                week -= 52;
+                year += 1;
+            }
+            const se = Number(`${year}${week.toString().padStart(2, '0')}`);
+            seList.push(se);
             citiesDataBySE[se] = [];
         }
+
+        console.log("SEs a processar:", seList);
 
         const batchSize = 50;
         for (let i = 0; i < cities.length; i += batchSize) {
@@ -279,14 +293,14 @@ async function updateState() {
                                 if (dengueData[se]) {
                                     citiesDataBySE[se].push({ ...city, ...dengueData[se] });
                                 } else {
-                                    console.warn(`Nenhum dado retornado para SE ${se} na cidade ${city.name}`);
+                                    //console.warn(`Nenhum dado retornado para SE ${se} na cidade ${city.name}`);
                                 }
                             }
                         } else {
-                            console.warn(`Nenhum dado retornado para a cidade ${city.name}`);
+                            //console.warn(`Nenhum dado retornado para a cidade ${city.name}`);
                         }
                     } catch (error) {
-                        console.error(`Erro ao processar ${city.name}:`, error.message);
+                        //console.error(`Erro ao processar ${city.name}:`, error.message);
                     }
                 })
             );
