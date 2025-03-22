@@ -48,7 +48,7 @@ async function getPreviousCityAccumulated(db, geocode, currentSE) {
     return previousData.cities[0].notif_accum_year || 0;
 }
 
-async function getEpidemiologicalWeeks(db, numWeeksToUpdate = 5) {
+async function getEpidemiologicalWeeks(db, numWeeksToUpdate = 10) {
     const stateCollection = db.collection("statev4");
     const stateData = await stateCollection.findOne({}, { sort: { SE: -1 } });
 
@@ -250,7 +250,7 @@ async function updateState() {
         await client.connect();
         const db = client.db("denguemg");
 
-        const numWeeksToUpdate = 5;
+        const numWeeksToUpdate = 10;
         const seData = await getEpidemiologicalWeeks(db, numWeeksToUpdate);
         if (!seData) return;
 
