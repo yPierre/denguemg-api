@@ -264,7 +264,7 @@ async function updateState() {
         await client.connect();
         const db = client.db("denguemg");
 
-        const numWeeksToUpdate = 5;
+        const numWeeksToUpdate = 52;
         const seData = await getEpidemiologicalWeeks(db, numWeeksToUpdate);
         if (!seData) return;
 
