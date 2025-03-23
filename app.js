@@ -281,7 +281,7 @@ async function updateState() {
 
         console.log("SEs a processar:", seList);
 
-        const batchSize = 50;
+        const batchSize = 25;
         for (let i = 0; i < cities.length; i += batchSize) {
             const batch = cities.slice(i, i + batchSize);
             await Promise.all(
