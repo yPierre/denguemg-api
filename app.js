@@ -84,7 +84,6 @@ async function fetchCitiesMG() {
         const cities = await response.json();
         return cities.map(city => ({ geocode: city.id, name: city.nome }));
     } catch (error) {
-        //console.error("Erro ao obter cidades de MG:", error.message);
         return [];
     }
 }
@@ -127,7 +126,10 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
                 p_rt1: entry.p_rt1,
                 p_inc100k: entry.p_inc100k,
                 nivel: entry.nivel,
+                versao_modelo: entry.versao_modelo,
+                tweet: entry.tweet,
                 Rt: entry.Rt,
+                pop: entry.pop,
                 tempmin: entry.tempmin,
                 umidmax: entry.umidmax,
                 receptivo: entry.receptivo,
@@ -137,8 +139,11 @@ async function fetchDengueData(db, geocode, cityName, ew_start, ew_end, ey_start
                 umidmin: entry.umidmin,
                 tempmed: entry.tempmed,
                 tempmax: entry.tempmax,
+                casprov_est: entry.casprov_est,
+                casprov_est_min: entry.casprov_est_min,
+                casprov_est_max: entry.casprov_est_max,
+                casconf: entry.casconf,
                 notif_accum_year: previousAccumulated + entry.casos,
-                versao_modelo: entry.versao_modelo || "N/A" // Adiciona mesmo que não exista ainda
             };
         }
 
@@ -180,22 +185,31 @@ async function aggregateStateData(db, citiesData, se) {
         stateData.cities.push({
             city: city.name,
             geocode: city.geocode,
+            casos_est: city.casos_est || 0,
+            casos_est_min: city.casos_est_min || 0,
+            casos_est_max: city.casos_est_max || 0,
             casos: city.casos || 0,
-            notif_accum_year: city.notif_accum_year || 0,
-            nivel_inc: city.nivel_inc || 0,
             p_rt1: city.p_rt1 || 0,
             p_inc100k: city.p_inc100k || 0,
             nivel: city.nivel || 1,
+            versao_modelo: city.versao_modelo || "N/A",
+            tweet: city.tweet || "N/A",
             Rt: city.Rt || 0,
+            pop: city.pop || 0,
             tempmin: city.tempmin || 0,
             umidmax: city.umidmax || 0,
             receptivo: city.receptivo || 0,
             transmissao: city.transmissao || 0,
+            nivel_inc: city.nivel_inc || 0,
             umidmed: city.umidmed || 0,
             umidmin: city.umidmin || 0,
             tempmed: city.tempmed || 0,
             tempmax: city.tempmax || 0,
-            versao_modelo: city.versao_modelo || "N/A"
+            casprov_est: city.casprov_est || 0,
+            casprov_est_min: city.casprov_est_min || 0,
+            casprov_est_max: city.casprov_est_max || 0,
+            casconf: city.casconf || 0,
+            notif_accum_year: city.notif_accum_year || 0
         });
     }
 
@@ -250,7 +264,7 @@ async function updateState() {
         await client.connect();
         const db = client.db("denguemg");
 
-        const numWeeksToUpdate = 52;
+        const numWeeksToUpdate = 5;
         const seData = await getEpidemiologicalWeeks(db, numWeeksToUpdate);
         if (!seData) return;
 
