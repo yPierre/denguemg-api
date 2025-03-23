@@ -260,9 +260,6 @@ async function updateStateDatabase(db, citiesDataBySE) {
                     { $set: newData },
                     { upsert: false } // Não insere, só atualiza se já existe
                 );
-                console.log(`SE ${se} atualizada (versao_modelo: ${apiModelVersion}).`);
-            } else {
-                console.log(`SE ${se} não atualizada (versao_modelo diferente: ${apiModelVersion} != ${latestModelVersion}).`);
             }
         }
     }
