@@ -250,7 +250,7 @@ async function updateState() {
         await client.connect();
         const db = client.db("denguemg");
 
-        const numWeeksToUpdate = 20;
+        const numWeeksToUpdate = 52;
         const seData = await getEpidemiologicalWeeks(db, numWeeksToUpdate);
         if (!seData) return;
 
@@ -281,7 +281,7 @@ async function updateState() {
 
         console.log("SEs a processar:", seList);
 
-        const batchSize = 25;
+        const batchSize = 50;
         for (let i = 0; i < cities.length; i += batchSize) {
             const batch = cities.slice(i, i + batchSize);
             await Promise.all(
