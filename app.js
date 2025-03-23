@@ -61,13 +61,13 @@ async function getEpidemiologicalWeeks(db, numWeeksToUpdate = 5) {
     const week = parseInt(latestSE.substring(4, 6));
 
     let ew_start, ew_end, ey_start, ey_end;
-    if (week >= numWeeksToUpdate) {
-        ew_start = week - numWeeksToUpdate;
+    if (week > numWeeksToUpdate) {
+        ew_start = week - numWeeksToUpdate;  
         ew_end = week + 1;
         ey_start = year;
         ey_end = year;
     } else {
-        const weeksInPrevYear = numWeeksToUpdate - week;
+        const weeksInPrevYear = numWeeksToUpdate - week;      //
         ew_start = 53 - weeksInPrevYear; // Volta para o ano anterior
         ew_end = week + 1;
         ey_start = year - 1;
