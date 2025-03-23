@@ -67,7 +67,7 @@ async function getEpidemiologicalWeeks(db, numWeeksToUpdate = 1) {
         ey_start = year;
         ey_end = year;
     } else {
-        const weeksInPrevYear = numWeeksToUpdate - week;      //
+        const weeksInPrevYear = numWeeksToUpdate - (week - 1);
         ew_start = 53 - weeksInPrevYear; // Volta para o ano anterior
         ew_end = week + 1;
         ey_start = year - 1;
@@ -229,31 +229,41 @@ async function aggregateStateData(db, citiesData, se) {
 
 async function updateStateDatabase(db, citiesDataBySE) {
     const stateCollection = db.collection("statev4");
+    const seList = Object.keys(citiesDataBySE).map(Number);
+    const latestSE = Math.max(...seList); // Semana recém-adicionada
+    const latestData = citiesDataBySE[latestSE];
+    const latestModelVersion = latestData.length > 0 ? latestData[0].versao_modelo : null;
+
+    if (!latestModelVersion) {
+        console.warn(`Nenhuma versão de modelo encontrada para SE ${latestSE}. Pulando atualização.`);
+        return;
+    }
 
     for (const seStr of Object.keys(citiesDataBySE)) {
-        const se = Number(seStr)
-        const existingData = await stateCollection.findOne({ SE: se });
+        const se = Number(seStr);
         const newData = await aggregateStateData(db, citiesDataBySE[seStr], se);
 
-        if (!existingData) {
-            // Inserir nova SE
-            await stateCollection.insertOne(newData);
-            //log(`Nova SE inserida: ${se}`);
-        } else {
-            // Atualizar apenas os campos especificados
+        if (se === latestSE) {
+            // Insere a nova semana sem checar versão
             await stateCollection.updateOne(
                 { SE: se },
-                {
-                    $set: {
-                        SE: se,
-                        total_week_cases: newData.total_week_cases,
-                        cities_in_alert_state: newData.cities_in_alert_state,
-                        total_notif_accum_year: newData.total_notif_accum_year,
-                        cities: newData.cities
-                    }
-                }
+                { $set: newData },
+                { upsert: true }
             );
-            //console.log(`SE atualizada: ${se}`);
+            console.log(`SE ${se} inserida como nova semana.`);
+        } else {
+            // Atualiza apenas se versao_modelo coincide
+            const apiModelVersion = newData.cities.length > 0 ? newData.cities[0].versao_modelo : null;
+            if (apiModelVersion === latestModelVersion) {
+                await stateCollection.updateOne(
+                    { SE: se },
+                    { $set: newData },
+                    { upsert: false } // Não insere, só atualiza se já existe
+                );
+                console.log(`SE ${se} atualizada (versao_modelo: ${apiModelVersion}).`);
+            } else {
+                console.log(`SE ${se} não atualizada (versao_modelo diferente: ${apiModelVersion} != ${latestModelVersion}).`);
+            }
         }
     }
 }
@@ -278,19 +288,28 @@ async function updateState() {
 
         let citiesDataBySE = {};
         const seList = [];
-        let currentYear = seData.ey_start;
-        let currentWeek = seData.ew_start;
-        const totalWeeks = numWeeksToUpdate + 1; // 5 para atualizar + 1 nova
-        for (let i = 0; i < totalWeeks; i++) {
-            let week = currentWeek + i;
-            let year = currentYear;
-            if (week > 52) {
-                week -= 52;
-                year += 1;
+
+        // Calcula as semanas a partir da última no banco
+        const latestSE = await db.collection("statev4").findOne({}, { sort: { SE: -1 } });
+        const latestYear = parseInt(latestSE.SE.toString().substring(0, 4));
+        const latestWeek = parseInt(latestSE.SE.toString().substring(4, 6));
+
+        // Gera as 5 semanas anteriores + 1 nova
+        let currentWeek = latestWeek - numWeeksToUpdate;
+        let currentYear = latestYear;
+        for (let i = 0; i <= numWeeksToUpdate + 1; i++) { // +1 para incluir a nova semana
+            if (currentWeek < 1) {
+                currentWeek += 52;
+                currentYear -= 1;
             }
-            const se = Number(`${year}${week.toString().padStart(2, '0')}`);
+            const se = Number(`${currentYear}${currentWeek.toString().padStart(2, '0')}`);
             seList.push(se);
             citiesDataBySE[se] = [];
+            currentWeek++;
+            if (currentWeek > 52) {
+                currentWeek -= 52;
+                currentYear += 1;
+            }
         }
 
         console.log("SEs a processar:", seList);
@@ -306,20 +325,15 @@ async function updateState() {
                             for (const se of seList) {
                                 if (dengueData[se]) {
                                     citiesDataBySE[se].push({ ...city, ...dengueData[se] });
-                                } else {
-                                    //console.warn(`Nenhum dado retornado para SE ${se} na cidade ${city.name}`);
                                 }
                             }
-                        } else {
-                            //console.warn(`Nenhum dado retornado para a cidade ${city.name}`);
                         }
                     } catch (error) {
-                        //console.error(`Erro ao processar ${city.name}:`, error.message);
+                        console.error(`Erro ao processar ${city.name}:`, error.message);
                     }
                 })
             );
         }
-
 
         await updateStateDatabase(db, citiesDataBySE);
         console.timeEnd("Tempo total de execução");
