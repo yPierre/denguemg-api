@@ -1,6 +1,6 @@
 # Atualização de Dados do Observatório de Dengue
 
-Olá! Este repositório contém o script que mantém o *dashboard* de dengue em Minas Gerais sempre atualizado com os dados da API do InfoDengue. Ele é parte do meu TCC.
+Olá! Este repositório contém o script que mantém o *dashboard* de dengue em Minas Gerais sempre atualizado com os dados da API do InfoDengue.
 
 ## O que ele faz?
 - Consulta a API pública do InfoDengue semanalmente;
