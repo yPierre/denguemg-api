@@ -30,7 +30,7 @@ async function fetchWithRetry(url, retries = 3) {
 
 async function getPreviousCityAccumulated(db, geocode, currentSE) {
     const stateCollection = db.collection("statev4");
-    const previousSE = currentSE - 1;
+    const previousSE = getPreviousSE(currentSE);
 
     // Busca o documento da SE anterior para a cidade
     const previousData = await stateCollection.findOne(
@@ -48,6 +48,48 @@ async function getPreviousCityAccumulated(db, geocode, currentSE) {
     return previousData.cities[0].notif_accum_year || 0;
 }
 
+function getWeeksInYear(year) {
+    const date = new Date(Date.UTC(year, 11, 28));
+    const dayOfYear = Math.floor((date - new Date(Date.UTC(year, 0, 1))) / 86400000) + 1;
+    return Math.ceil(dayOfYear / 7);
+}
+
+function getPreviousSE(se) {
+    const year = Math.floor(se / 100);
+    const week = se % 100;
+    if (week > 1) return year * 100 + week - 1;
+
+    const previousYear = year - 1;
+    return previousYear * 100 + getWeeksInYear(previousYear);
+}
+
+function getNextSE(se) {
+    const year = Math.floor(se / 100);
+    const week = se % 100;
+    if (week < getWeeksInYear(year)) return year * 100 + week + 1;
+
+    return (year + 1) * 100 + 1;
+}
+
+function shiftSE(se, offset) {
+    let shiftedSE = se;
+    const step = offset < 0 ? getPreviousSE : getNextSE;
+    for (let i = 0; i < Math.abs(offset); i++) {
+        shiftedSE = step(shiftedSE);
+    }
+    return shiftedSE;
+}
+
+function getSERange(startSE, endSE) {
+    const seList = [];
+    let currentSE = startSE;
+    while (true) {
+        seList.push(currentSE);
+        if (currentSE === endSE) return seList;
+        currentSE = getNextSE(currentSE);
+    }
+}
+
 async function getEpidemiologicalWeeks(db, numWeeksToUpdate = 1) {
     const stateCollection = db.collection("statev4");
     const stateData = await stateCollection.findOne({}, { sort: { SE: -1 } });
@@ -56,25 +98,17 @@ async function getEpidemiologicalWeeks(db, numWeeksToUpdate = 1) {
         throw new Error("Nenhuma informação epidemiológica encontrada no banco.");
     }
 
-    const latestSE = stateData.SE.toString();
-    const year = parseInt(latestSE.substring(0, 4));
-    const week = parseInt(latestSE.substring(4, 6));
+    const latestSE = Number(stateData.SE);
+    const startSE = shiftSE(latestSE, -numWeeksToUpdate);
+    const endSE = getNextSE(latestSE);
 
-    let ew_start, ew_end, ey_start, ey_end;
-    if (week > numWeeksToUpdate) {
-        ew_start = week - numWeeksToUpdate;  
-        ew_end = week + 1;
-        ey_start = year;
-        ey_end = year;
-    } else {
-        const weeksInPrevYear = numWeeksToUpdate - (week - 1);
-        ew_start = 53 - weeksInPrevYear; // Volta para o ano anterior
-        ew_end = week + 1;
-        ey_start = year - 1;
-        ey_end = year;
-    }
-
-    return { ew_start, ew_end, ey_start, ey_end };
+    return {
+        ew_start: startSE % 100,
+        ew_end: endSE % 100,
+        ey_start: Math.floor(startSE / 100),
+        ey_end: Math.floor(endSE / 100),
+        seList: getSERange(startSE, endSE)
+    };
 }
 
 async function fetchCitiesMG() {
@@ -166,7 +200,7 @@ async function aggregateStateData(db, citiesData, se) {
     // Verifica se citiesData é iterável
     if (!Array.isArray(citiesData) || !citiesData) {
         console.warn(`Nenhum dado de cidades disponível para SE ${se}. Retornando stateData vazio.`);
-        const previousSE = se - 1;
+        const previousSE = getPreviousSE(se);
         const previousData = await db.collection("statev4").findOne(
             { SE: previousSE },
             { projection: { total_notif_accum_year: 1 } }
@@ -214,7 +248,7 @@ async function aggregateStateData(db, citiesData, se) {
     }
 
     // Calcula total_notif_accum_year corretamente
-    const previousSE = se - 1;
+    const previousSE = getPreviousSE(se);
     const previousData = await db.collection("statev4").findOne(
         { SE: previousSE },
         { projection: { total_notif_accum_year: 1, SE: 1 } }
@@ -283,31 +317,9 @@ async function updateState() {
             return;
         }
 
-        let citiesDataBySE = {};
-        const seList = [];
-
-        // Calcula as semanas a partir da última no banco
-        const latestSE = await db.collection("statev4").findOne({}, { sort: { SE: -1 } });
-        const latestYear = parseInt(latestSE.SE.toString().substring(0, 4));
-        const latestWeek = parseInt(latestSE.SE.toString().substring(4, 6));
-
-        // Gera as 5 semanas anteriores + 1 nova
-        let currentWeek = latestWeek - numWeeksToUpdate;
-        let currentYear = latestYear;
-        for (let i = 0; i <= numWeeksToUpdate + 1; i++) { // +1 para incluir a nova semana
-            if (currentWeek < 1) {
-                currentWeek += 52;
-                currentYear -= 1;
-            }
-            const se = Number(`${currentYear}${currentWeek.toString().padStart(2, '0')}`);
-            seList.push(se);
-            citiesDataBySE[se] = [];
-            currentWeek++;
-            if (currentWeek > 52) {
-                currentWeek -= 52;
-                currentYear += 1;
-            }
-        }
+        const citiesDataBySE = {};
+        const seList = seData.seList;
+        for (const se of seList) citiesDataBySE[se] = [];
 
         console.log("SEs a processar:", seList);
 
