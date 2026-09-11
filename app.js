@@ -49,9 +49,9 @@ async function getPreviousCityAccumulated(db, geocode, currentSE) {
 }
 
 function getWeeksInYear(year) {
-    const date = new Date(Date.UTC(year, 11, 28));
-    const dayOfYear = Math.floor((date - new Date(Date.UTC(year, 0, 1))) / 86400000) + 1;
-    return Math.ceil(dayOfYear / 7);
+    const firstDay = new Date(Date.UTC(year, 0, 1)).getUTCDay() || 7;
+    const isLeapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    return firstDay === 4 || (isLeapYear && firstDay === 3) ? 53 : 52;
 }
 
 function getPreviousSE(se) {
@@ -264,7 +264,13 @@ async function aggregateStateData(db, citiesData, se) {
 async function updateStateDatabase(db, citiesDataBySE) {
     const stateCollection = db.collection("statev4");
     const seList = Object.keys(citiesDataBySE).map(Number);
-    const latestSE = Math.max(...seList); // Semana recém-adicionada
+    const availableSEs = seList.filter(se => citiesDataBySE[se].length > 0);
+    if (availableSEs.length === 0) {
+        console.warn("Nenhum dado epidemiológico retornado pela API. Pulando atualização.");
+        return;
+    }
+
+    const latestSE = Math.max(...availableSEs); // Maior semana retornada pela API
     const latestData = citiesDataBySE[latestSE];
     const latestModelVersion = latestData.length > 0 ? latestData[0].versao_modelo : null;
 
